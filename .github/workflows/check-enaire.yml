@@ -2,7 +2,7 @@ name: Check Enaire Updates
 
 on:
   schedule:
-    - cron: "*/30 * * * *" # Cada 30 minutos
+    - cron: "*/15 * * * *" # Cada 15 minutos
   workflow_dispatch: # Permite ejecución manual
 
 jobs:
