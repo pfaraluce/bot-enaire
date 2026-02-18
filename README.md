@@ -102,11 +102,6 @@ GitHub Actions.
 5. (Opcional) Ve a la pestaña **Actions**, selecciona "Check Enaire Updates" y
    pulsa **Run workflow** para probarlo manualmente.
 
-> [!WARNING]
-> En tu captura de pantalla, parece que los has puesto en **Environments**. El
-> bot **no los verá** ahí. Borra esos y créalos en **Settings > Secrets and
-> variables > Actions > Repository secrets**.
-
 El bot se ejecutará cada 15 minutos automáticamente y guardará su estado en el
 repo para no repetir notificaciones.
 
