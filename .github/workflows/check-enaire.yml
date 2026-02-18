@@ -27,6 +27,11 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
+      - name: Verify secrets
+        run: |
+          if [ -z "${{ secrets.TELEGRAM_BOT_TOKEN }}" ]; then echo "❌ TELEGRAM_BOT_TOKEN is missing"; else echo "✅ TELEGRAM_BOT_TOKEN is set"; fi
+          if [ -z "${{ secrets.TELEGRAM_CHAT_ID }}" ]; then echo "❌ TELEGRAM_CHAT_ID is missing"; else echo "✅ TELEGRAM_CHAT_ID is set"; fi
+
       - name: Run check
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
