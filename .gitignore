@@ -3,7 +3,7 @@
 
 # Dependencies
 node_modules/
-package-lock.json
+# package-lock.json (Keep it for CI consistency)
 
 # Bot State (tracked for GitHub Actions persistence)
 # state.json
