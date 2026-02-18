@@ -4,12 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node bot.js",
-    "test-bot": "node bot.js --test",
-    "background": "npx pm2 start bot.js --name bot-enaire",
-    "stop": "npx pm2 stop bot-enaire",
-    "logs": "npx pm2 logs bot-enaire",
-    "monitor": "npx pm2 monit"
+    "check": "node check.js"
   },
   "keywords": [],
   "author": "",

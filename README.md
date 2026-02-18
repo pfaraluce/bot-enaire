@@ -82,11 +82,10 @@ npm run stop        # Detener el bot
 
 ## 🛠️ Estructura del Proyecto
 
-- `bot.js`: Lógica principal del bot y gestión de intervalos.
 - `scraper.js`: Motor de scraping usando Playwright.
+- `check.js`: Script principal optimizado para ejecuciones en GitHub Actions.
 - `state.json`: Almacena el último estado conocido para detectar cambios
   (importante para GitHub Actions).
-- `latest_update.png`: Última captura de pantalla generada.
 
 ## 🚀 Ejecución Perpetua (GitHub Actions)
 
