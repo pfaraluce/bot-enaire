@@ -1,0 +1,17 @@
+# Credentials
+.env
+
+# Dependencies
+node_modules/
+package-lock.json
+
+# Bot State
+state.json
+
+# Artifacts & Logs
+latest_update.png
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
