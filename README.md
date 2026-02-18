@@ -97,18 +97,21 @@ GitHub Actions.
 
 1. Sube este repositorio a tu **GitHub**.
 2. Ve a la pestaña **Settings** > **Secrets and variables** > **Actions**.
-3. Asegúrate de estar en la pestaña **Secrets** (arriba) y busca la sección
-   **Repository secrets** (no "Environment secrets").
+3. Asegúrate de:
+   - Ir a la pestaña **Secrets** (arriba, junto a Variables).
+   - Buscar la sección **Repository secrets** (abajo del todo).
+   - **NO** lo pongas en "Environment secrets" a menos que sepas configurar
+     entornos.
 4. Añade estos dos **Repository secrets**:
    - `TELEGRAM_BOT_TOKEN`: Tu token de bot.
    - `TELEGRAM_CHAT_ID`: Tu ID de chat.
 5. (Opcional) Ve a la pestaña **Actions**, selecciona "Check Enaire Updates" y
    pulsa **Run workflow** para probarlo manualmente.
 
-> [!IMPORTANT]
-> Si los secretos aparecen bajo un nombre de entorno (ej. "Production"), el bot
-> no los verá a menos que se configure ese entorno en el workflow. Usa
-> **Repository secrets** para mayor sencillez.
+> [!WARNING]
+> En tu captura de pantalla, parece que los has puesto en **Environments**. El
+> bot **no los verá** ahí. Borra esos y créalos en **Settings > Secrets and
+> variables > Actions > Repository secrets**.
 
 El bot se ejecutará cada 15 minutos automáticamente y guardará su estado en el
 repo para no repetir notificaciones.
