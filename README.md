@@ -75,11 +75,6 @@ npm run logs        # Ver logs en tiempo real
 npm run stop        # Detener el bot
 ```
 
-## 🤖 Comandos del Bot
-
-- `/star`: Consulta manualmente el estado actual de la estrella en la
-  convocatoria.
-
 ## 🛠️ Estructura del Proyecto
 
 - `scraper.js`: Motor de scraping usando Playwright.
