@@ -1,0 +1,42 @@
+name: Check Enaire Updates
+
+on:
+  schedule:
+    - cron: "*/30 * * * *" # Cada 30 minutos
+  workflow_dispatch: # Permite ejecución manual
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Para poder actualizar state.json
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium
+
+      - name: Run check
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: node check.js
+
+      - name: Commit state changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add state.json
+          git commit -m "chore: update state.json [skip ci]" || echo "No changes to commit"
+          git push

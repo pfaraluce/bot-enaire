@@ -5,8 +5,8 @@
 node_modules/
 package-lock.json
 
-# Bot State
-state.json
+# Bot State (tracked for GitHub Actions persistence)
+# state.json
 
 # Artifacts & Logs
 latest_update.png

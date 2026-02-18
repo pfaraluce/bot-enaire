@@ -84,8 +84,27 @@ npm run stop        # Detener el bot
 
 - `bot.js`: Lógica principal del bot y gestión de intervalos.
 - `scraper.js`: Motor de scraping usando Playwright.
-- `state.json`: Almacena el último estado conocido para detectar cambios.
+- `state.json`: Almacena el último estado conocido para detectar cambios
+  (importante para GitHub Actions).
 - `latest_update.png`: Última captura de pantalla generada.
+
+## 🚀 Ejecución Perpetua (GitHub Actions)
+
+Este proyecto está configurado para ejecutarse gratis y "para siempre" usando
+GitHub Actions.
+
+### Pasos para Activar:
+
+1. Sube este repositorio a tu **GitHub**.
+2. Ve a la pestaña **Settings** > **Secrets and variables** > **Actions**.
+3. Añade estos dos **Repository secrets**:
+   - `TELEGRAM_BOT_TOKEN`: Tu token de bot.
+   - `TELEGRAM_CHAT_ID`: Tu ID de chat.
+4. (Opcional) Ve a la pestaña **Actions**, selecciona "Check Enaire Updates" y
+   pulsa **Run workflow** para probarlo manualmente.
+
+El bot se ejecutará cada 30 minutos automáticamente y guardará su estado en el
+repo para no repetir notificaciones.
 
 ---
 
