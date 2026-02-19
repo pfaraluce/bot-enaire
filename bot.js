@@ -47,13 +47,15 @@ async function sendNtfyNotification(title, message, priority = 'high') {
     if (!NTFY_TOPIC) return;
     try {
         console.log(`[ntfy] Enviando a tópico: ${NTFY_TOPIC}...`);
+        // Los emojis no son válidos en cabeceras HTTP — eliminarlos del Title
+        const safeTitle = title.replace(/[^\x00-\x7F]/g, '').trim();
         await axios.post(`https://ntfy.sh/${NTFY_TOPIC}`, message, {
             headers: {
-                'Title': title,
+                'Title': safeTitle,
                 'Priority': priority,
                 'Tags': 'airplane,star'
             },
-            timeout: 5000 // Timeout de 5 seg para no bloquear el bot
+            timeout: 5000
         });
         console.log('[ntfy] Notificación enviada correctamente.');
     } catch (e) {
@@ -158,12 +160,16 @@ bot.catch((err) => {
     console.error('[Bot] Error interno (ignorado):', err.message);
 });
 
-// Iniciar servidor
-bot.launch({ dropPendingUpdates: true }).then(() => {
-    console.log(`Bot iniciado. Revisión automática cada ${CHECK_INTERVAL_MINUTES} minutos.`);
-    scheduledCheck();
-    setInterval(scheduledCheck, CHECK_INTERVAL_MINUTES * 60 * 1000);
-});
+// Arrancar checks INMEDIATAMENTE, sin esperar al bot.launch()
+console.log(`[Sistema] Iniciando checks cada ${CHECK_INTERVAL_MINUTES} minutos...`);
+scheduledCheck();
+setInterval(scheduledCheck, CHECK_INTERVAL_MINUTES * 60 * 1000);
+
+// Lanzar el bot para comandos (/star etc.) en paralelo
+// Si falla (409 u otro error), los checks siguen funcionando
+bot.launch({ dropPendingUpdates: true })
+    .then(() => console.log('[Bot] Comandos activos.'))
+    .catch(err => console.error('[Bot] Launch fallido (no fatal):', err.message));
 
 // Parada elegante
 process.once('SIGINT', () => bot.stop('SIGINT'));
