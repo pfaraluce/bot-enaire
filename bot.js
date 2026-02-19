@@ -3,13 +3,10 @@ const { Telegraf } = require('telegraf');
 const fs = require('fs');
 const path = require('path');
 const { checkUpdates } = require('./scraper');
-const axios = require('axios'); // Movido arriba
 
 const STATE_FILE = path.join(__dirname, 'state.json');
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
-const NTFY_TOPIC = process.env.NTFY_TOPIC; // Nuevo: Tópico para ntfy.sh
-// Configuración de intervalo: por defecto 10 minutos
 const CHECK_INTERVAL_MINUTES = parseInt(process.env.CHECK_INTERVAL_MINUTES) || 10;
 
 if (!BOT_TOKEN || !CHAT_ID) {
@@ -25,10 +22,10 @@ function loadState() {
     if (fs.existsSync(STATE_FILE)) {
         try {
             const data = fs.readFileSync(STATE_FILE, 'utf8').trim();
-            if (!data) return {}; // Si el archivo está vacío, devolvemos objeto vacío
+            if (!data) return {};
             return JSON.parse(data);
         } catch (e) {
-            console.error('[Sistema] Error leyendo state.json (posiblemente corrupto):', e.message);
+            console.error('[Sistema] Error leyendo state.json:', e.message);
             return {};
         }
     }
@@ -43,39 +40,19 @@ function saveState(state) {
     }
 }
 
-async function sendNtfyNotification(title, message, priority = 'high') {
-    if (!NTFY_TOPIC) return;
-    try {
-        console.log(`[ntfy] Enviando a tópico: ${NTFY_TOPIC}...`);
-        // Los emojis no son válidos en cabeceras HTTP — eliminarlos del Title
-        const safeTitle = title.replace(/[^\x00-\x7F]/g, '').trim();
-        await axios.post(`https://ntfy.sh/${NTFY_TOPIC}`, message, {
-            headers: {
-                'Title': safeTitle,
-                'Priority': priority,
-                'Tags': 'airplane,star'
-            },
-            timeout: 5000
-        });
-        console.log('[ntfy] Notificación enviada correctamente.');
-    } catch (e) {
-        console.error('[ntfy] Error:', e.message);
-    }
-}
-
-async function performCheck(notifyOnlyOnChange = true) {
+async function performCheck() {
     console.log(`[${new Date().toISOString()}] Iniciando comprobación...`);
     const currentState = loadState();
     const result = await checkUpdates();
 
     if (result.error) {
         console.error('Error en el scraping:', result.error);
-        return { error: result.error };
+        return;
     }
 
     if (!result.found) {
         console.log('Convocatoria no encontrada.');
-        return { found: false };
+        return;
     }
 
     const previousHasStar = currentState.hasStar || false;
@@ -110,13 +87,9 @@ async function performCheck(notifyOnlyOnChange = true) {
             } else {
                 await bot.telegram.sendMessage(CHAT_ID, message, { parse_mode: 'HTML' });
             }
-            // Enviar a ntfy también
-            const ntfyTitle = currentHasStar ? '⭐ NOVEDAD ENAIRE' : '📢 CAMBIO ENAIRE';
-            await sendNtfyNotification(ntfyTitle, currentText);
-            
             console.log('Notificación enviada.');
         } catch (e) {
-            console.error('Error enviando mensaje:', e);
+            console.error('Error enviando mensaje:', e.message);
         }
     }
 
@@ -125,8 +98,6 @@ async function performCheck(notifyOnlyOnChange = true) {
         text: currentText,
         lastCheck: new Date().toISOString()
     });
-
-    return result;
 }
 
 // Comandos
@@ -136,37 +107,34 @@ bot.command('star', async (ctx) => {
     const result = await checkUpdates();
     if (result.error) return ctx.reply('Error al consultar la web. ❌');
     if (!result.found) return ctx.reply('No se encuentra la convocatoria. ❌');
-    
-    const response = result.hasStar ? 'SÍ hay estrella de novedades. ⭐' : 'No hay estrella de novedades en este momento. ❌';
-    ctx.reply(response);
+    ctx.reply(result.hasStar ? 'SÍ hay estrella de novedades. ⭐' : 'No hay estrella en este momento. ❌');
 });
 
-// Lógica de comprobación periódica
+// Comprobación periódica
 let isChecking = false;
 async function scheduledCheck() {
     if (isChecking) return;
     isChecking = true;
     try {
-        await performCheck(true);
+        await performCheck();
     } catch (e) {
-        console.error('[scheduledCheck] Error inesperado:', e.message);
+        console.error('[scheduledCheck] Error:', e.message);
     } finally {
         isChecking = false;
     }
 }
 
-// Capturar errores del bot (ej: 409 conflict) sin matar el proceso
+// Capturar errores del bot sin matar el proceso
 bot.catch((err) => {
-    console.error('[Bot] Error interno (ignorado):', err.message);
+    console.error('[Bot] Error interno:', err.message);
 });
 
-// Arrancar checks INMEDIATAMENTE, sin esperar al bot.launch()
+// Arrancar checks inmediatamente, sin esperar a bot.launch()
 console.log(`[Sistema] Iniciando checks cada ${CHECK_INTERVAL_MINUTES} minutos...`);
 scheduledCheck();
 setInterval(scheduledCheck, CHECK_INTERVAL_MINUTES * 60 * 1000);
 
-// Lanzar el bot para comandos (/star etc.) en paralelo
-// Si falla (409 u otro error), los checks siguen funcionando
+// Lanzar bot para comandos en paralelo
 bot.launch({ dropPendingUpdates: true })
     .then(() => console.log('[Bot] Comandos activos.'))
     .catch(err => console.error('[Bot] Launch fallido (no fatal):', err.message));
