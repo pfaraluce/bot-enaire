@@ -153,12 +153,15 @@ async function scheduledCheck() {
     }
 }
 
+// Capturar errores del bot (ej: 409 conflict) sin matar el proceso
+bot.catch((err) => {
+    console.error('[Bot] Error interno (ignorado):', err.message);
+});
+
 // Iniciar servidor
 bot.launch({ dropPendingUpdates: true }).then(() => {
     console.log(`Bot iniciado. Revisión automática cada ${CHECK_INTERVAL_MINUTES} minutos.`);
-    // Primera comprobación al arrancar
     scheduledCheck();
-    // Programar intervalo
     setInterval(scheduledCheck, CHECK_INTERVAL_MINUTES * 60 * 1000);
 });
 
