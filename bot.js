@@ -144,8 +144,13 @@ let isChecking = false;
 async function scheduledCheck() {
     if (isChecking) return;
     isChecking = true;
-    await performCheck(true);
-    isChecking = false;
+    try {
+        await performCheck(true);
+    } catch (e) {
+        console.error('[scheduledCheck] Error inesperado:', e.message);
+    } finally {
+        isChecking = false;
+    }
 }
 
 // Iniciar servidor
