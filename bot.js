@@ -5,33 +5,43 @@ const path = require('path');
 const { checkUpdates } = require('./scraper');
 
 const STATE_FILE = path.join(__dirname, 'state.json');
+const SUBSCRIBERS_FILE = path.join(__dirname, 'subscribers.json');
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+const ADMIN_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const CHECK_INTERVAL_MINUTES = parseInt(process.env.CHECK_INTERVAL_MINUTES) || 10;
+const STAR_COOLDOWN_MS = 60 * 1000;
+const starCooldowns = new Map();
 
-if (!BOT_TOKEN || !CHAT_ID) {
+if (!BOT_TOKEN || !ADMIN_CHAT_ID) {
     console.error('ERROR: TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be set in .env file.');
     process.exit(1);
 }
 
 const bot = new Telegraf(BOT_TOKEN);
-
 console.log(`[Sistema] Iniciando bot con Node.js ${process.version}`);
 
-function loadState() {
-    if (fs.existsSync(STATE_FILE)) {
-        try {
-            const data = fs.readFileSync(STATE_FILE, 'utf8').trim();
-            if (!data) return {};
-            return JSON.parse(data);
-        } catch (e) {
-            console.error('[Sistema] Error leyendo state.json:', e.message);
-            return {};
-        }
+// --- Suscriptores ---
+function loadSubscribers() {
+    try {
+        const data = fs.readFileSync(SUBSCRIBERS_FILE, 'utf8').trim();
+        return new Set(JSON.parse(data));
+    } catch {
+        return new Set([ADMIN_CHAT_ID]);
     }
-    return {};
+}
+function saveSubscribers(subs) {
+    fs.writeFileSync(SUBSCRIBERS_FILE, JSON.stringify([...subs]), 'utf8');
 }
 
+// --- Estado ---
+function loadState() {
+    try {
+        const data = fs.readFileSync(STATE_FILE, 'utf8').trim();
+        return data ? JSON.parse(data) : {};
+    } catch {
+        return {};
+    }
+}
 function saveState(state) {
     try {
         fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), 'utf8');
@@ -40,105 +50,158 @@ function saveState(state) {
     }
 }
 
-async function performCheck() {
-    console.log(`[${new Date().toISOString()}] Iniciando comprobación...`);
-    const currentState = loadState();
-    const result = await checkUpdates();
+// --- Comparar listas de documentos ---
+// Usa URL como clave única de cada documento
+function docsMap(docs) {
+    const map = {};
+    (docs || []).forEach(d => { map[d.url] = d; });
+    return map;
+}
 
-    if (result.error) {
-        console.error('Error en el scraping:', result.error);
-        return;
-    }
+function diffDocuments(prevDocs, currDocs) {
+    const prev = docsMap(prevDocs);
+    const curr = docsMap(currDocs);
+    const added = Object.values(curr).filter(d => !prev[d.url]);
+    const removed = Object.values(prev).filter(d => !curr[d.url]);
+    return { added, removed };
+}
 
-    if (!result.found) {
-        console.log('Convocatoria no encontrada.');
-        return;
-    }
-
-    const previousHasStar = currentState.hasStar || false;
-    const currentHasStar = result.hasStar;
-    const previousText = currentState.text || '';
-    const currentText = result.text;
-
-    let message = '';
-    let shouldSend = false;
-
-    console.log(`[Lógica] Prev: ${previousHasStar ? '⭐' : '❌'}, Actual: ${currentHasStar ? '⭐' : '❌'}`);
-
-    if (currentHasStar && !previousHasStar) {
-        console.log('[Lógica] ¡Novedad detectada! Preparando mensaje de estrella.');
-        message = `🚀 <b>¡HAY NOVEDADES EN ENAIRE!</b> 🚀\n\n⭐ Se ha detectado la <b>estrella de actualización</b>.\n\n📝 <b>Contenido:</b>\n<i>${currentText}</i>\n\n🔗 <a href="https://empleo.enaire.es/empleo/PFSrv?accion=avisos&codigo=20251120&titulo=CONVOCATORIA%20EXTERNA%20CONTROLADORES%202025">Ver convocatoria</a>`;
-        shouldSend = true;
-    } else if (currentText !== previousText && currentText.length > 0) {
-        console.log('[Lógica] Cambio de texto detectado.');
-        message = `📢 <b>CAMBIO EN LA CONVOCATORIA</b> 📢\n\nEl texto ha sido modificado.\n\n🆕 <b>Nuevo contenido:</b>\n<i>${currentText}</i>\n\n⭐ <b>Estrella:</b> ${currentHasStar ? 'ACTIVA ✅' : 'NO DETECTADA ❌'}`;
-        shouldSend = true;
-    } else {
-        console.log('[Lógica] Sin cambios relevantes.');
-    }
-
-    if (shouldSend && message) {
+// --- Broadcast ---
+async function broadcast(message, screenshotPath) {
+    const subs = loadSubscribers();
+    for (const chatId of subs) {
         try {
-            if (result.screenshot && fs.existsSync(result.screenshot)) {
-                await bot.telegram.sendPhoto(CHAT_ID, { source: result.screenshot }, {
+            if (screenshotPath && fs.existsSync(screenshotPath)) {
+                await bot.telegram.sendPhoto(chatId, { source: screenshotPath }, {
                     caption: message,
                     parse_mode: 'HTML'
                 });
             } else {
-                await bot.telegram.sendMessage(CHAT_ID, message, { parse_mode: 'HTML' });
+                await bot.telegram.sendMessage(chatId, message, { parse_mode: 'HTML' });
             }
-            console.log('Notificación enviada.');
         } catch (e) {
-            console.error('Error enviando mensaje:', e.message);
+            console.error(`[Broadcast] Error a ${chatId}:`, e.message);
         }
     }
-
-    saveState({
-        hasStar: currentHasStar,
-        text: currentText,
-        lastCheck: new Date().toISOString()
-    });
+    console.log(`[Broadcast] Enviado a ${subs.size} suscriptor(es).`);
 }
 
-// Comandos
-bot.command('star', async (ctx) => {
-    console.log(`[${new Date().toISOString()}] Solicitud manual /star.`);
-    ctx.reply('Comprobando estado actual de la web... ⏳');
+// --- Comprobación principal ---
+async function performCheck() {
+    console.log(`[${new Date().toISOString()}] Iniciando comprobación...`);
+    const state = loadState();
     const result = await checkUpdates();
-    if (result.error) return ctx.reply('Error al consultar la web. ❌');
-    if (!result.found) return ctx.reply('No se encuentra la convocatoria. ❌');
-    ctx.reply(result.hasStar ? 'SÍ hay estrella de novedades. ⭐' : 'No hay estrella en este momento. ❌');
+
+    if (result.error) { console.error('Error scraping:', result.error); return; }
+    if (!result.found) { console.log('Convocatoria no encontrada.'); return; }
+
+    const prevDocs = state.documents || [];
+    const currDocs = result.documents || [];
+    const { added, removed } = diffDocuments(prevDocs, currDocs);
+    const prevHasStar = state.hasStar || false;
+
+    console.log(`[Lógica] Docs: ${currDocs.length} | Añadidos: ${added.length} | Eliminados: ${removed.length} | Estrella: ${result.hasStar}`);
+
+    let message = '';
+
+    if (added.length > 0 || removed.length > 0) {
+        const lines = [`📋 <b>CAMBIOS EN LA CONVOCATORIA ENAIRE 2025</b>\n`];
+
+        if (added.length > 0) {
+            lines.push('✅ <b>NUEVOS DOCUMENTOS:</b>');
+            added.forEach(d => {
+                lines.push(`• <b>${d.section}</b>\n  <a href="${d.url}">${d.name}</a> <i>(${d.date})</i>`);
+            });
+        }
+        if (removed.length > 0) {
+            lines.push('\n🗑️ <b>DOCUMENTOS ELIMINADOS:</b>');
+            removed.forEach(d => {
+                lines.push(`• <b>${d.section}</b>\n  ${d.name} <i>(${d.date})</i>`);
+            });
+        }
+        lines.push(`\n🔗 <a href="https://empleo.enaire.es/empleo/PFSrv?accion=avisos&codigo=20251120&titulo=CONVOCATORIA%20EXTERNA%20CONTROLADORES%202025">Ver convocatoria completa</a>`);
+        message = lines.join('\n');
+
+    } else if (result.hasStar && !prevHasStar) {
+        // La estrella aparece sin cambios de documentos detectados aún
+        message = `⭐ <b>¡Estrella detectada en la convocatoria!</b>\n\nHay novedades recientes. Comprueba la convocatoria:\n\n🔗 <a href="https://empleo.enaire.es/empleo/PFSrv?accion=avisos&codigo=20251120&titulo=CONVOCATORIA%20EXTERNA%20CONTROLADORES%202025">Ver convocatoria</a>`;
+    } else {
+        console.log('[Lógica] Sin cambios relevantes.');
+    }
+
+    if (message) {
+        await broadcast(message, result.screenshot);
+    }
+
+    saveState({ hasStar: result.hasStar, documents: currDocs, lastCheck: new Date().toISOString() });
+}
+
+// --- Comandos ---
+bot.command('start', async (ctx) => {
+    const chatId = ctx.chat.id.toString();
+    const subs = loadSubscribers();
+    if (subs.has(chatId)) return ctx.reply('Ya estás suscrito. Te avisaré cuando haya novedades. ✅');
+    subs.add(chatId);
+    saveSubscribers(subs);
+    console.log(`[Subs] Nuevo: ${chatId}`);
+    ctx.reply('¡Suscrito! 🎉 Te avisaré automáticamente cuando haya documentos nuevos o cambios en la convocatoria de controladores Enaire 2025.');
 });
 
-// Comprobación periódica
+bot.command('stop', async (ctx) => {
+    const chatId = ctx.chat.id.toString();
+    if (chatId === ADMIN_CHAT_ID) return ctx.reply('El admin no puede desuscribirse. 🛡️');
+    const subs = loadSubscribers();
+    subs.delete(chatId);
+    saveSubscribers(subs);
+    ctx.reply('Te has dado de baja. Ya no recibirás notificaciones. 👋');
+});
+
+bot.command('star', async (ctx) => {
+    const chatId = ctx.chat.id.toString();
+    const now = Date.now();
+    if (now - (starCooldowns.get(chatId) || 0) < STAR_COOLDOWN_MS) {
+        const secs = Math.ceil((STAR_COOLDOWN_MS - (now - starCooldowns.get(chatId))) / 1000);
+        return ctx.reply(`⏳ Espera ${secs}s antes de volver a consultar.`);
+    }
+    starCooldowns.set(chatId, now);
+    ctx.reply('Comprobando... ⏳');
+    const result = await checkUpdates();
+    if (result.error) return ctx.reply('Error al consultar. ❌');
+    if (!result.found) return ctx.reply('No se encuentra la convocatoria. ❌');
+    const docs = result.documents || [];
+    const newDocs = docs.filter(d => d.isNew);
+    let reply = result.hasStar ? '⭐ <b>Hay novedades</b> (estrella activa)\n\n' : '❌ Sin novedades en este momento.\n\n';
+    if (newDocs.length > 0) {
+        reply += '<b>Documentos marcados como nuevos:</b>\n';
+        newDocs.forEach(d => { reply += `• <a href="${d.url}">${d.name}</a> (${d.date})\n`; });
+    }
+    ctx.reply(reply.trim(), { parse_mode: 'HTML' });
+});
+
+bot.command('subs', async (ctx) => {
+    if (ctx.chat.id.toString() !== ADMIN_CHAT_ID) return;
+    ctx.reply(`Suscriptores activos: ${loadSubscribers().size} 👥`);
+});
+
+// --- Scheduler ---
 let isChecking = false;
 async function scheduledCheck() {
     if (isChecking) return;
     isChecking = true;
-    try {
-        await performCheck();
-    } catch (e) {
-        console.error('[scheduledCheck] Error:', e.message);
-    } finally {
-        isChecking = false;
-    }
+    try { await performCheck(); }
+    catch (e) { console.error('[scheduledCheck] Error:', e.message); }
+    finally { isChecking = false; }
 }
 
-// Capturar errores del bot sin matar el proceso
-bot.catch((err) => {
-    console.error('[Bot] Error interno:', err.message);
-});
+bot.catch((err) => console.error('[Bot] Error interno:', err.message));
 
-// Arrancar checks inmediatamente, sin esperar a bot.launch()
 console.log(`[Sistema] Iniciando checks cada ${CHECK_INTERVAL_MINUTES} minutos...`);
 scheduledCheck();
 setInterval(scheduledCheck, CHECK_INTERVAL_MINUTES * 60 * 1000);
 
-// Lanzar bot para comandos en paralelo
 bot.launch({ dropPendingUpdates: true })
     .then(() => console.log('[Bot] Comandos activos.'))
     .catch(err => console.error('[Bot] Launch fallido (no fatal):', err.message));
 
-// Parada elegante
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
