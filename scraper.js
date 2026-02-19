@@ -7,7 +7,10 @@ const TARGET_URL = 'https://empleo.enaire.es/empleo/';
 const SCREENSHOT_PATH = path.join(__dirname, 'latest_update.png');
 
 async function checkUpdates() {
-    const browser = await chromium.launch({ headless: true });
+    const browser = await chromium.launch({ 
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox'] // Necesario para ejecutar como root en Linux
+    });
     const context = await browser.newContext({
         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         viewport: { width: 1280, height: 720 }

@@ -105,6 +105,48 @@ GitHub Actions.
 El bot se ejecutará cada 15 minutos automáticamente y guardará su estado en el
 repo para no repetir notificaciones.
 
+## 🌐 Despliegue en VPS / Plesk
+
+Para que el bot responda a comandos como `/star` 24/7, debes ejecutarlo en un
+servidor (VPS).
+
+### 1. Instalación de dependencias en Linux
+
+En servidores Linux (Ubuntu/Debian), Playwright necesita librerías adicionales.
+Ejecuta esto vía SSH:
+
+```bash
+npx playwright install-deps chromium
+```
+
+### 2. Configuración en Plesk
+
+1. Sube los archivos al servidor.
+2. Abre el panel de **Node.js** en Plesk.
+3. **Application Startup File**: Cambia `app.js` por `bot.js` (Plesk pone
+   `app.js` por defecto y dará error si no lo cambias).
+4. Configura las variables (`TELEGRAM_BOT_TOKEN`, etc.) en el panel o sube el
+   `.env`.
+5. Pulsa "Run npm install" y "Restart Node.js".
+
+### 3. Mantenerlo vivo (PM2)
+
+Si usas terminal, te recomiendo **PM2**:
+
+```bash
+npm install -g pm2
+pm2 start bot.js --name bot-enaire
+```
+
+### 4. Notificaciones en iPhone (ntfy.sh)
+
+Si quieres avisos directos en el iPhone sin depender solo de Telegram:
+
+1. Instala la app **ntfy** desde la App Store.
+2. Pulsa el botón **+** (Subscribe to topic).
+3. Inventa un nombre único (ej: `secreto-enaire-pablo`).
+4. Pon ese mismo nombre en tu `.env` como `NTFY_TOPIC`.
+
 ---
 
 _Desarrollado para facilitar el seguimiento de la convocatoria de
