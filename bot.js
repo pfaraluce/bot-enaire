@@ -149,7 +149,7 @@ async function scheduledCheck() {
 }
 
 // Iniciar servidor
-bot.launch().then(() => {
+bot.launch({ dropPendingUpdates: true }).then(() => {
     console.log(`Bot iniciado. Revisión automática cada ${CHECK_INTERVAL_MINUTES} minutos.`);
     // Primera comprobación al arrancar
     scheduledCheck();
