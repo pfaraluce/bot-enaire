@@ -166,7 +166,10 @@ bot.command('star', async (ctx) => {
     starCooldowns.set(chatId, now);
     ctx.reply('Comprobando... ⏳');
     const result = await checkUpdates();
-    if (result.error) return ctx.reply('Error al consultar. ❌');
+    if (result.error) {
+        console.error('[Bot /star] Error:', result.error);
+        return ctx.reply(`Error al consultar. ❌\nDetalles: ${result.error}`);
+    }
     if (!result.found) return ctx.reply('No se encuentra la convocatoria. ❌');
     const docs = result.documents || [];
     const newDocs = docs.filter(d => d.isNew);
@@ -181,6 +184,35 @@ bot.command('star', async (ctx) => {
 bot.command('subs', async (ctx) => {
     if (ctx.chat.id.toString() !== ADMIN_CHAT_ID) return;
     ctx.reply(`Suscriptores activos: ${loadSubscribers().size} 👥`);
+});
+
+bot.command('settings', async (ctx) => {
+    const chatId = ctx.chat.id.toString();
+    const isAdmin = chatId === ADMIN_CHAT_ID;
+    const state = loadState();
+    const subs = loadSubscribers();
+    
+    let reply = `⚙️ <b>Configuración y Estado del Bot</b>\n\n`;
+    reply += `• <b>Frecuencia de comprobación:</b> cada ${CHECK_INTERVAL_MINUTES} ${CHECK_INTERVAL_MINUTES === 1 ? 'minuto' : 'minutos'}\n`;
+    
+    if (state.lastCheck) {
+        const lastCheckDate = new Date(state.lastCheck);
+        const formattedDate = lastCheckDate.toLocaleString('es-ES', { timeZone: 'Europe/Madrid' });
+        reply += `• <b>Última comprobación:</b> ${formattedDate} (hora peninsular)\n`;
+    } else {
+        reply += `• <b>Última comprobación:</b> Ninguna registrada aún\n`;
+    }
+    
+    reply += `• <b>Estado convocatoria:</b> ${state.hasStar ? '⭐ Novedades detectadas' : '❌ Sin novedades'}\n`;
+    
+    if (isAdmin) {
+        reply += `\n🛡️ <b>Información de Administrador:</b>\n`;
+        reply += `• <b>Admin Chat ID:</b> <code>${ADMIN_CHAT_ID}</code>\n`;
+        reply += `• <b>Suscriptores activos:</b> ${subs.size} 👥\n`;
+        reply += `• <b>Documentos en caché:</b> ${state.documents ? state.documents.length : 0}\n`;
+    }
+    
+    ctx.reply(reply, { parse_mode: 'HTML' });
 });
 
 // --- Scheduler ---
@@ -198,6 +230,16 @@ bot.catch((err) => console.error('[Bot] Error interno:', err.message));
 console.log(`[Sistema] Iniciando checks cada ${CHECK_INTERVAL_MINUTES} minutos...`);
 scheduledCheck();
 setInterval(scheduledCheck, CHECK_INTERVAL_MINUTES * 60 * 1000);
+
+// --- Servidor HTTP Dummy para Plesk (Passenger) ---
+const http = require('http');
+const PORT = process.env.PORT || 3000;
+http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('El bot de Enaire está en funcionamiento. 🤖\n');
+}).listen(PORT, () => {
+    console.log(`[Sistema] Servidor dummy escuchando en el puerto ${PORT}`);
+});
 
 bot.launch({ dropPendingUpdates: true })
     .then(() => console.log('[Bot] Comandos activos.'))
